@@ -1,7 +1,7 @@
 #include "delay.h"
 
-#ifdef STM32L476xx
-#include "stm32l476xx.h"
+#ifdef STM32F4xx
+#include "stm32f4xx.h"
 #endif
 
 namespace MM::Utils
