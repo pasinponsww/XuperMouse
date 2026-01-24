@@ -1,8 +1,8 @@
 #pragma once
 
-#include "gpio.h"
+#include "common/drivers/io/gpio.h"
 
-namespace LBR
+namespace MM
 {
 class GpioChipSelect
 {
@@ -14,4 +14,4 @@ public:
 private:
     Gpio& cs_pin;
 };
-}  // namespace LBR
+}  // namespace MM

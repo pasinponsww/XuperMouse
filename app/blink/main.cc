@@ -6,7 +6,7 @@
 // {
 // }
 
-using namespace LBR;
+using namespace MM;
 
 int main(int argc, char* argv[])
 {
