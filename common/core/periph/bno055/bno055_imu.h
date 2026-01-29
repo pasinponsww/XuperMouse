@@ -3,7 +3,6 @@
  * @brief BNO055 IMU sensor interface
  * @author Bex Saw
  * @date 2025-10-22
- * @note This file contains the interface for the BNO055 IMU sensor, including initialization, reading, and calibration functions.
  */
 
 #pragma once
