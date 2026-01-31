@@ -5,6 +5,7 @@
 #include <cstdint>
 #include "gpio.h"
 #include "mcu_support/stm32/f4xx/stm32f4xx.h"
+#include "stm32f411xe.h"
 
 #define ST_GPIO_MAX_PINS 16
 
@@ -39,7 +40,8 @@ enum class GpioPupd : uint8_t
 {
     NO_PULL = 0,
     PULL_UP,
-    PULL_DOWN
+    PULL_DOWN,
+    RESERVED
 };
 
 struct StGpioSettings
