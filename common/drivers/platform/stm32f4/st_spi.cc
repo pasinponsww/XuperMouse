@@ -8,7 +8,7 @@
 
 #include "st_spi.h"
 #include <cstddef>
-#include "common/drivers/delay/delay.h"
+#include "common/drivers/time/delay.h"
 #include "mcu_support/stm32/f4xx/stm32f4xx.h"
 
 namespace MM
@@ -262,7 +262,8 @@ bool HwSpi::Init()
     SetReg(&instance->CR2, uint32_t(settings.threshold), 12, 1);
 
     // Configure the SPI data size to 8 bits
-    instance->CR2 |= (SPI_CR2_DS_0 | SPI_CR2_DS_1 | SPI_CR2_DS_2);
+    instance->CR1 &= ~(SPI_CR1_DFF);  // 8-bit data frame format
+    //instance->CR2 |= SPI_CR2_FRXTH; // 16-bit FIFO threshold
 
     // Use software slave management and toggle SSI = 1 to pull NSS to high
     // Toggle SSI = 0 when we want to select the slave device for data transfer
