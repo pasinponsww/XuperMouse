@@ -11,13 +11,17 @@ bool W25q::init()
 {
     // Read status reg to get current bits
     std::array<uint8_t, 1> status_reg_3;
-    if (!this->status_reg_read(StatusRead::STATUS_REGISTER_3, status_reg_3)) return false;
+    if (!this->status_reg_read(StatusRead::STATUS_REGISTER_3, status_reg_3))
+        return false;
 
     // Set WPS to enable individual block and sector lock
-    if (!this->status_reg_write(StatusWrite::STATUS_REGISTER_3, (kWpsMask), (kWpsMask))) return false;
+    if (!this->status_reg_write(StatusWrite::STATUS_REGISTER_3, (kWpsMask),
+                                (kWpsMask)))
+        return false;
 
     // By default on startup, all block lock bits are set to 1. We have to unlock all the blocks to write into them.
-    if (!this->write_enable()) return false;
+    if (!this->write_enable())
+        return false;
 
     cs.cs_enable();
     std::array<uint8_t, 1> global_unlock_cmd{Opcode::kGlobalBlockUnlock};
@@ -44,13 +48,15 @@ bool W25q::busy_check()
     cs.cs_disable();
 
     // Check if Sequential Transfer failed
-    if (!status) return false;
+    if (!status)
+        return false;
 
     // Check if BUSY bit is 1
     return sr1_val[0] & kBusyMask;
 }
 
-bool W25q::status_reg_write(StatusWrite status_reg_num, uint8_t mask, uint8_t val)
+bool W25q::status_reg_write(StatusWrite status_reg_num, uint8_t mask,
+                            uint8_t val)
 {
     // Check for current writes or erases
     while (this->busy_check())
@@ -73,23 +79,27 @@ bool W25q::status_reg_write(StatusWrite status_reg_num, uint8_t mask, uint8_t va
         status_read_cmd = StatusRead::STATUS_REGISTER_3;
     }
 
-    if (!this->status_reg_read(status_read_cmd, status_reg_val)) return false;
+    if (!this->status_reg_read(status_read_cmd, status_reg_val))
+        return false;
 
     // Create new byte to send to the status reg
     uint8_t new_byte = (status_reg_val[0] & ~mask) | (val & mask);
 
     // Enable Volatile Write
-    if (!this->volatile_write_enable()) return false;
+    if (!this->volatile_write_enable())
+        return false;
 
     // Write a byte of data to desired status reg
-    std::array<uint8_t, 2> txbuf = {static_cast<uint8_t>(status_reg_num), new_byte};
+    std::array<uint8_t, 2> txbuf = {static_cast<uint8_t>(status_reg_num),
+                                    new_byte};
 
     cs.cs_enable();
     bool status = spi.write(txbuf);
     cs.cs_disable();
 
     // Check if SPI write failed
-    if (!status) return false;
+    if (!status)
+        return false;
 
     // Add delay of tw
     Utils::DelayUs(1);
@@ -103,11 +113,13 @@ bool W25q::status_reg_write(StatusWrite status_reg_num, uint8_t mask, uint8_t va
     std::array<uint8_t, 1> rxbuf;
     do
     {
-        if (!status_reg_read(StatusRead::STATUS_REGISTER_1, rxbuf)) return false;
+        if (!status_reg_read(StatusRead::STATUS_REGISTER_1, rxbuf))
+            return false;
     } while (rxbuf[0] & kWelMask);
 
     // Check if correct value was written into the Status Reg
-    if (!this->status_reg_read(status_read_cmd, status_reg_val)) return false;
+    if (!this->status_reg_read(status_read_cmd, status_reg_val))
+        return false;
     return (status_reg_val[0] & mask) == (val & mask);
 }
 
@@ -149,11 +161,13 @@ bool W25q::write_enable()
     cs.cs_disable();
 
     // Check if SPI Write failed
-    if (!status) return false;
+    if (!status)
+        return false;
 
     // Check if WEL bit was set
     std::array<uint8_t, 1> status_reg_val;
-    if (!this->status_reg_read(StatusRead::STATUS_REGISTER_1, status_reg_val)) return false;
+    if (!this->status_reg_read(StatusRead::STATUS_REGISTER_1, status_reg_val))
+        return false;
     return status_reg_val[0] & kWelMask;
 }
 
@@ -191,14 +205,16 @@ bool W25q::reset()
     cs.cs_enable();
     bool status = spi.write(enable_reset_cmd);
     cs.cs_disable();
-    if (!status) return false;
+    if (!status)
+        return false;
 
     // reset Device
     std::array<uint8_t, 1> reset_cmd{Opcode::kresetDevice};
     cs.cs_enable();
     status = spi.write(reset_cmd);
     cs.cs_disable();
-    if (!status) return false;
+    if (!status)
+        return false;
 
     // Add 30 microsecond delay using timer
     Utils::DelayUs(30);
@@ -216,8 +232,10 @@ bool W25q::read(uint8_t block, uint8_t sector, uint8_t page, uint8_t offset,
                 std::span<uint8_t> rxbuf)
 {
     // Return false if sector or page is outside of the threshold
-    if (sector > 15 || page > 15) return false;
-    if (block > 255 || offset > 255) return false;
+    if (sector > 15 || page > 15)
+        return false;
+    if (block > 255 || offset > 255)
+        return false;
 
     // Calculate 24 bit Address of where to start read
     uint32_t addr = static_cast<uint32_t>(block) * kBlockSizeBytes;
@@ -253,13 +271,16 @@ bool W25q::page_program(uint8_t block, uint8_t sector, uint8_t page,
 {
 
     // Return false if block, sector, page is outside of the threshold
-    if (block > 255 || sector > 15 || page > 15 || offset > 255) return false;
+    if (block > 255 || sector > 15 || page > 15 || offset > 255)
+        return false;
 
     // Can only write up to 256 bytes at a time
-    if (txbuf.size() > 256) return false;
+    if (txbuf.size() > 256)
+        return false;
 
     // Cannot overflow pages when writing
-    if (offset + txbuf.size() > 256) return false;
+    if (offset + txbuf.size() > 256)
+        return false;
 
     // Calculate 24 bit Address of where to start write
     uint32_t addr = static_cast<uint32_t>(block) * kBlockSizeBytes;
@@ -281,7 +302,8 @@ bool W25q::page_program(uint8_t block, uint8_t sector, uint8_t page,
     }
 
     // Write Enable
-    if (!this->write_enable()) return false;
+    if (!this->write_enable())
+        return false;
 
     // Chip Select Enable
     cs.cs_enable();
@@ -293,10 +315,12 @@ bool W25q::page_program(uint8_t block, uint8_t sector, uint8_t page,
     cs.cs_disable();
 
     // Check if SPI Write failed
-    if (!status) return false;
+    if (!status)
+        return false;
 
     // W25Q read to verify correct data was written
-    if (!this->read(block, sector, page, offset, rxbuf)) return false;
+    if (!this->read(block, sector, page, offset, rxbuf))
+        return false;
 
     return std::equal(rxbuf.begin(), rxbuf.end(), txbuf.begin(), txbuf.end());
 }
@@ -304,7 +328,8 @@ bool W25q::page_program(uint8_t block, uint8_t sector, uint8_t page,
 bool W25q::block_erase(uint8_t block)
 {
     // Return false if block outside of threshold
-    if (block > 255) return false;
+    if (block > 255)
+        return false;
 
     // Calculate address of where to start erase
     uint32_t addr = static_cast<uint32_t>(block) * kBlockSizeBytes;
@@ -375,7 +400,8 @@ bool W25q::sector_erase(uint8_t block, uint8_t sector)
     }
 
     // Write Enable
-    if (!this->write_enable()) return false;
+    if (!this->write_enable())
+        return false;
 
     // Chip Select Enable
     cs.cs_enable();
@@ -387,7 +413,8 @@ bool W25q::sector_erase(uint8_t block, uint8_t sector)
     cs.cs_disable();
 
     // Check if SPI Write failed
-    if (!status) return false;
+    if (!status)
+        return false;
 
     // Check BUSY bit for any current erase or writes
     while (this->busy_check())
@@ -471,11 +498,14 @@ bool W25q::block_lock(uint8_t block)
 
     // Check if Block is already locked
     uint8_t block_lock_byte;
-    if (!(this->block_lock_status_read(addr, block_lock_byte))) return false;
-    if (is_block_locked(block_lock_byte)) return false;
+    if (!(this->block_lock_status_read(addr, block_lock_byte)))
+        return false;
+    if (is_block_locked(block_lock_byte))
+        return false;
 
     // Lock the Block
-    if (!this->write_enable()) return false;
+    if (!this->write_enable())
+        return false;
 
     std::array<uint8_t, 4> txbuf{
         Opcode::kIndividualBlockLock, static_cast<uint8_t>(addr >> 16),
@@ -494,12 +524,15 @@ bool W25q::block_unlock(uint8_t block)
 
     // Check if block is already unlocked
     uint8_t block_lock_byte;
-    if (!(this->block_lock_status_read(addr, block_lock_byte))) return false;
-    if (!is_block_locked(block_lock_byte)) return false;
+    if (!(this->block_lock_status_read(addr, block_lock_byte)))
+        return false;
+    if (!is_block_locked(block_lock_byte))
+        return false;
 
     // Unlock the Block
-    if (!this->write_enable()) return false;
-    
+    if (!this->write_enable())
+        return false;
+
     std::array<uint8_t, 4> txbuf{
         Opcode::kIndividualBlockUnlock, static_cast<uint8_t>(addr >> 16),
         static_cast<uint8_t>(addr >> 8), static_cast<uint8_t>(addr)};

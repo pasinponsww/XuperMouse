@@ -10,9 +10,9 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include "delay.h"
 #include "gpio_cs.h"
 #include "spi.h"
-#include "delay.h"
 
 namespace MM
 {
@@ -62,7 +62,8 @@ public:
     * @param val The actual bit value we want to write into the Status Reg, Ex. value 101 on 4:2 -> 00010100 -> (0x05 << 2)
     * @return true Correct value was written to the Status Reg, false Operation failed
     */
-    bool status_reg_write(StatusWrite status_reg_num, uint8_t mask, uint8_t val);
+    bool status_reg_write(StatusWrite status_reg_num, uint8_t mask,
+                          uint8_t val);
 
     /**
     * @brief Read specified status register
@@ -213,6 +214,5 @@ private:
     static constexpr uint32_t kSectorSizeBytes = 4096u;
     static constexpr uint32_t kPageSizeBytes = 256u;
     static constexpr uint32_t kOffsetSizeBit = 1u;
-
 };
 }  // namespace MM
