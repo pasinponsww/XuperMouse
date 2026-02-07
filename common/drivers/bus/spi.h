@@ -14,9 +14,9 @@ namespace MM
 class Spi
 {
 public:
-    virtual bool Read(std::span<uint8_t> rx_data) = 0;
-    virtual bool Write(std::span<uint8_t> tx_data) = 0;
-    virtual bool Transfer(std::span<uint8_t> tx_data,
+    virtual bool read(std::span<uint8_t> rx_data) = 0;
+    virtual bool write(std::span<uint8_t> tx_data) = 0;
+    virtual bool seq_transfer(std::span<uint8_t> tx_data,
                           std::span<uint8_t> rx_data) = 0;
     virtual ~Spi() = default;
 };
