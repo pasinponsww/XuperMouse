@@ -1,4 +1,4 @@
-set(EXECUTABLE imu_test)
+set(EXECUTABLE pwm_test)
 set(LDF ${CMAKE_CURRENT_BINARY_DIR}/${EXECUTABLE}.ld)
 
 set(PREPROCESS_DEFS
@@ -9,7 +9,7 @@ set(PREPROCESS_DEFS
 # Only add BSP for this target device
 add_subdirectory_for(STM32F411 bsp_f411)
 
-if (TARGET imu_bsp)
+if (TARGET pwm_bsp)
 
 	add_executable_for(${TARGET_DEVICE} ${EXECUTABLE} ${LDF}
 		main.cc
@@ -22,7 +22,7 @@ if (TARGET imu_bsp)
 	)
 
 	target_link_libraries_for(${TARGET_DEVICE} ${EXECUTABLE} PRIVATE
-		imu_bsp
+		pwm_bsp
 	)
 
 	target_preprocess_for(${TARGET_DEVICE} ${EXECUTABLE} ${LINKER_SCRIPT} ${LDF} ${PREPROCESS_DEFS})
