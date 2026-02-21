@@ -11,6 +11,7 @@ int main(int argc, char* argv[])
     while (1)
     {
         hw.led.toggle();
+        for (volatile size_t i = 0; i < 100000; i++);  // Delay
     }
 
     return 0;
