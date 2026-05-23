@@ -1,4 +1,5 @@
 #include "../board.h"
+#include "delay.h"
 #include "st_adc.h"
 #include "st_dma.h"
 #include "st_gpio.h"
@@ -21,7 +22,7 @@ namespace Stmf4
 {
 /* Emitters Initialization */
 StGpioSettings led_settings{GpioMode::GPOUT, GpioOtype::PUSH_PULL,
-                            GpioOspeed::VERY_HIGH, GpioPupd::NO_PULL, 0};
+                            GpioOspeed::VERY_HIGH, GpioPupd::PULL_DOWN, 0};
 StGpioParams led1_params{7, GPIOA, led_settings};
 StGpioParams led2_params{6, GPIOA, led_settings};
 StGpioParams led3_params{4, GPIOA, led_settings};
@@ -33,7 +34,7 @@ HwGpio led4{led4_params};
 
 /* Phototransistors Initialization */
 StGpioSettings pt_settings{GpioMode::ANALOG, GpioOtype::PUSH_PULL,
-                           GpioOspeed::VERY_HIGH};
+                           GpioOspeed::VERY_HIGH, GpioPupd::NO_PULL, 0};
 StGpioParams pt1_params{1, GPIOB, pt_settings};
 StGpioParams pt2_params{0, GPIOB, pt_settings};
 StGpioParams pt3_params{1, GPIOC, pt_settings};
@@ -52,7 +53,7 @@ StDmaParams dma_params{
 HwDma dma{dma_params};
 
 /* ADC Initialization */
-std::array<uint8_t, 4> adc_seq{9, 8, 11, 10};
+std::array<uint8_t, 1> adc_seq{9};
 AdcChCycles ch9_cycles{9, AdcCycles::CYCLES_144};
 AdcChCycles ch8_cycles{8, AdcCycles::CYCLES_144};
 AdcChCycles ch11_cycles{11, AdcCycles::CYCLES_144};
@@ -70,10 +71,10 @@ StAdcParams adc_params{adc_settings, ADC1, ADC1_COMMON};
 HwAdc adc{adc_params};
 
 /* IR Sensors Initialization */
-IrParams ir1_params{adc, dma, led1};
-IrParams ir2_params{adc, dma, led2};
-IrParams ir3_params{adc, dma, led3};
-IrParams ir4_params{adc, dma, led4};
+IrParams ir1_params{adc, dma, led1, 9};
+IrParams ir2_params{adc, dma, led2, 8};
+IrParams ir3_params{adc, dma, led3, 11};
+IrParams ir4_params{adc, dma, led4, 10};
 IrSensor ir1{ir1_params};
 IrSensor ir2{ir2_params};
 IrSensor ir3{ir3_params};
@@ -90,13 +91,24 @@ StTimebaseParams timebase_params{TIM1};
 HwTimebase timebase{timebase_params};
 
 /* Sysclk Initialization */
-// TODO: Change to HSE 24MHz (need sysclk hotfix)
-HwClk clk{Configuration::HSI_16MHZ};
+HwClk clk{Configuration::SYSCLK_HSE_100MHZ};
 
 /* USART Initialization */
+StGpioSettings usart_gpio_settings{GpioMode::AF, GpioOtype::PUSH_PULL,
+                                   GpioOspeed::VERY_HIGH, GpioPupd::NO_PULL, 7};
+StGpioParams usart_tx_params{9, GPIOA,
+                             usart_gpio_settings};  // PA9  USART1_TX AF7
+StGpioParams usart_rx_params{10, GPIOA,
+                             usart_gpio_settings};  // PA10 USART1_RX AF7
+HwGpio usart_tx{usart_tx_params};
+HwGpio usart_rx{usart_rx_params};
 StUsartSettings usart_settings{UsartOversample::X8, UsartSampleMode::SINGLE};
-StUsartParams usart_params{USART2, clk.get_freq(), 115200, usart_settings};
+StUsartParams usart_params{USART1, clk.get_freq(), 115200, usart_settings};
 StUsart usart{usart_params};
+
+// Delay setup
+StTimebaseParams delay_params{TIM5};
+HwTimebase delay{delay_params};
 
 }  // namespace Stmf4
 }  // namespace MM
@@ -106,7 +118,8 @@ namespace MM
 /* Non-hardware specific object creation and initialization */
 Board board{.ir_controller = MM::Stmf4::ircontroller,
             .timebase = MM::Stmf4::timebase,
-            .usart = MM::Stmf4::usart};
+            .usart = MM::Stmf4::usart,
+            .delay = MM::Stmf4::delay};
 
 bool board_init()
 {
@@ -114,16 +127,21 @@ bool board_init()
 
     /* Init SYSCLK/HCLK and configure prescalers for APB1 and APB2 */
     result = result && Stmf4::clk.init();
+    result = result && Stmf4::usart.set_clock_freq(Stmf4::clk.get_freq());
     uint32_t hclk = Stmf4::clk.get_freq();
+    // Timebase driver currently validates against APB max (50 MHz), so pass APB-style clock.
+    // TIM1 is on APB2 and may run faster internally depending on prescalers.
+    uint32_t tim_pclk = hclk / 2u;
 
     /* Init Periph Clks */
     // Enable GPIO Bus Clocks
     RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOBEN |
                      RCC_AHB1ENR_GPIOCEN | RCC_AHB1ENR_DMA2EN);
-    // Enable USART2 Bus Clock
-    RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
+    // Enable USART1 Bus Clock (USART1 is on APB2)
+    RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
     // Enable ADC1 and TIM1 Bus Clock
     RCC->APB2ENR |= (RCC_APB2ENR_ADC1EN | RCC_APB2ENR_TIM1EN);
+    RCC->APB1ENR |= RCC_APB1ENR_TIM5EN;
 
     /* Init Periphs */
     // IR Emitter Inits
@@ -141,9 +159,30 @@ bool board_init()
     // DMA, ADC, USART, and Timebase Inits
     result = result && Stmf4::dma.init();
     result = result && Stmf4::adc.init();
+    result = result && Stmf4::usart_tx.init();
+    result = result && Stmf4::usart_rx.init();
     result = result && Stmf4::usart.init();
-    result =
-        result && Stmf4::timebase.init(hclk, kTimerFreq, kTimerPeriod, true);
+    if (result)
+    {
+        static constexpr uint8_t kBootMsg[] = "BOOT\r\n";
+        Stmf4::usart.send(
+            std::span<const uint8_t>(kBootMsg, sizeof(kBootMsg) - 1));
+    }
+    result = result &&
+             Stmf4::timebase.init(tim_pclk, kTimerFreq, kTimerPeriod, true);
+    if (!result)
+    {
+        return false;
+    }
+
+    Stmf4::timebase.start();
+
+    result &= Stmf4::delay.init(50'000'000u, 1'000'000u,
+                                std::chrono::microseconds(4'294'967u));
+    Stmf4::delay.start();
+
+    // Bind timebase to use delay functions
+    Utils::bind_timebase(Stmf4::delay);
 
     /* Interrupt Enables */
     // Enable ADC1 interrupts in NVIC
@@ -154,15 +193,17 @@ bool board_init()
     NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
     NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 0);
 
-    // Enable USART2 interrupt in NVIC
-    NVIC_EnableIRQ(USART2_IRQn);
-    NVIC_SetPriority(USART2_IRQn, 1);
+    // Enable USART1 interrupt in NVIC
+    NVIC_EnableIRQ(USART1_IRQn);
+    NVIC_SetPriority(USART1_IRQn, 1);
 
     return result;
 }
 
 void board_recover()
 {
+    bool result = true;
+
     // Stop TIM1 from firing during recovery
     NVIC_DisableIRQ(TIM1_UP_TIM10_IRQn);
 
@@ -170,11 +211,11 @@ void board_recover()
     Stmf4::adc.stop();
 
     // Abort any in-progress DMA transfer
-    Stmf4::dma.abort();
+    result = result && Stmf4::dma.abort();
 
     // Clear ADC overrun flag and re-enable DMA requests
-    Stmf4::adc.ovr_recover();
-    Stmf4::adc.en_dma_req();
+    result = result && Stmf4::adc.ovr_recover();
+    result = result && Stmf4::adc.en_dma_req();
 
     // Turn off all IR emitters
     Stmf4::led1.set(0);
@@ -183,7 +224,16 @@ void board_recover()
     Stmf4::led4.set(0);
 
     // Reset IR controller and all sensor state machines
-    Stmf4::ircontroller.reset();
+    result = result && Stmf4::ircontroller.reset();
+
+    // Ensure a failed recover pass retriggers recovery on next tick.
+    if (!result)
+    {
+        g_adc_ovr = true;
+        NVIC_EnableIRQ(ADC_IRQn);
+        NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
+        return;
+    }
 
     // Clear fault flag
     g_adc_ovr = false;
@@ -205,7 +255,7 @@ extern "C" void ADC_IRQHandler()
     NVIC_DisableIRQ(ADC_IRQn);
 }
 
-extern "C" void USART2_IRQHandler(void)
+extern "C" void USART1_IRQHandler(void)
 {
     // Check if data is available
     if (Stmf4::usart.get_addr()->SR & USART_SR_RXNE)
@@ -219,7 +269,7 @@ extern "C" void USART2_IRQHandler(void)
     }
 }
 
-extern "C" void TIM1_IRQHandler()
+extern "C" void TIM1_UP_TIM10_IRQHandler()
 {
     // Clear the update interrupt flag
     TIM1->SR &= ~TIM_SR_UIF;

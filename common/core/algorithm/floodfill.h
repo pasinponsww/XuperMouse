@@ -6,7 +6,6 @@
 */
 
 #pragma once
-#include <algorithm>
 #include <cstdint>
 #include "ircontroller.h"
 
@@ -57,6 +56,12 @@ public:
     char get_next_move();
 
     /**
+     * @brief Count how many cells can be driven straight ahead from the current cell.
+     * @note This is used by zoom mode to decide how long to keep accelerating before a turn.
+     */
+    int count_straight_ahead() const;
+
+    /**
     * @brief Get the calculated distance value for a specific cell
     * @return The distance to the goal
     */
@@ -70,6 +75,13 @@ public:
     * @param ir_vals The IR sensor values to process (raw values from the sensors)
     */
     void process_ir_data(const IrValues& ir_vals);
+
+    /**
+     * @brief Checks if the mouse is done searching the maze
+     * 
+     * @return true Maze has been searched, false still searching
+     */
+    bool is_searched();
 
 private:
     /**
@@ -144,8 +156,6 @@ private:
     /**
     * @brief Updates the zooming mode of the algorithm
     */
-    void update_zooming();
-
     /**
     * @brief Converts a relative turn to an absolute direction based on the current direction
     * @param relative_turn The relative turn (0 for forward, 1 for right, 2 for backward, 3 for left)
@@ -166,6 +176,9 @@ private:
     bool sensor_front_wall{false};
     bool sensor_right_wall{false};
     bool sensor_left_wall{false};
+
+    // Search completed
+    bool searched = false;
 };
 
 }  // namespace MM
