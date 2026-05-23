@@ -1,4 +1,4 @@
-set(EXECUTABLE drv8231_test)
+set(EXECUTABLE pid_controller)
 set(LDF ${CMAKE_CURRENT_BINARY_DIR}/${EXECUTABLE}.ld)
 
 set(PREPROCESS_DEFS
@@ -9,7 +9,7 @@ set(PREPROCESS_DEFS
 # Only add BSP for this target device
 add_subdirectory_for(STM32F411 bsp_f411)
 
-if (TARGET drv_bsp)
+if (TARGET pid_bsp)
 
 	add_executable_for(${TARGET_DEVICE} ${EXECUTABLE} ${LDF}
 		main.cc
@@ -22,7 +22,8 @@ if (TARGET drv_bsp)
 	)
 
 	target_link_libraries_for(${TARGET_DEVICE} ${EXECUTABLE} PRIVATE
-		drv_bsp
+		pid_bsp
+		motion
 	)
 
 	target_preprocess_for(${TARGET_DEVICE} ${EXECUTABLE} ${LINKER_SCRIPT} ${LDF} ${PREPROCESS_DEFS})
@@ -35,4 +36,8 @@ if (TARGET drv_bsp)
 			${CMAKE_CURRENT_BINARY_DIR}/${EXECUTABLE}.elf
 	)
 
+endif()
+
+if("${TARGET_DEVICE}" STREQUAL "NATIVE")
+    # No native test subdirectory exists for this app.
 endif()

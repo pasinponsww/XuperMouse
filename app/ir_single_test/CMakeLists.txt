@@ -1,4 +1,4 @@
-set(EXECUTABLE drv8231_test)
+set(EXECUTABLE ir_single_test)
 set(LDF ${CMAKE_CURRENT_BINARY_DIR}/${EXECUTABLE}.ld)
 
 set(PREPROCESS_DEFS
@@ -6,10 +6,9 @@ set(PREPROCESS_DEFS
 	-DDEF_FLASH_SIZE=1024K
 )
 
-# Only add BSP for this target device
 add_subdirectory_for(STM32F411 bsp_f411)
 
-if (TARGET drv_bsp)
+if (TARGET ir_single_bsp)
 
 	add_executable_for(${TARGET_DEVICE} ${EXECUTABLE} ${LDF}
 		main.cc
@@ -18,11 +17,10 @@ if (TARGET drv_bsp)
 
 	target_include_directories_for(${TARGET_DEVICE} ${EXECUTABLE}
 		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bsp_f411
 	)
 
 	target_link_libraries_for(${TARGET_DEVICE} ${EXECUTABLE} PRIVATE
-		drv_bsp
+		ir_single_bsp
 	)
 
 	target_preprocess_for(${TARGET_DEVICE} ${EXECUTABLE} ${LINKER_SCRIPT} ${LDF} ${PREPROCESS_DEFS})
