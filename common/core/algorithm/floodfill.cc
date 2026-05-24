@@ -19,7 +19,6 @@ void Floodfill::update()
             update_search();
             break;
         case Mode::ZOOMING:
-            update_zooming();
             break;
     }
 }
@@ -58,11 +57,29 @@ char Floodfill::get_next_move()
             continue;
         }
 
-        // Update the best direction if the neighboring cell has a smaller distance value than the current best distance
-        if (maze[next_x][next_y] < best_distance)
+        if (mode == Mode::ZOOMING)
         {
-            best_distance = maze[next_x][next_y];
-            best_dir = next_dir;
+            if (maze[next_x][next_y] < best_distance)
+            {
+                best_distance = maze[next_x][next_y];
+                best_dir = next_dir;
+            }
+            else if (maze[next_x][next_y] == best_distance)
+            {
+                if (dir == next_dir)
+                {
+                    best_dir = next_dir;
+                }
+            }
+        }
+        else
+        {
+            // Update the best direction if the neighboring cell has a smaller distance value than the current best distance
+            if (maze[next_x][next_y] < best_distance)
+            {
+                best_distance = maze[next_x][next_y];
+                best_dir = next_dir;
+            }
         }
     }
 
@@ -91,6 +108,48 @@ char Floodfill::get_next_move()
     return 'L';
 }
 
+int Floodfill::count_straight_ahead() const
+{
+    constexpr int kDirectionCount{4};
+    constexpr int dx[kDirectionCount]{0, 1, 0, -1};
+    constexpr int dy[kDirectionCount]{1, 0, -1, 0};
+
+    int x{current_x};
+    int y{current_y};
+    int count{0};
+
+    while (true)
+    {
+        // Stop if there is a known wall directly in front of this cell.
+        if ((walls[x][y] & (1 << dir)) != 0)
+        {
+            break;
+        }
+
+        const int next_x{x + dx[dir]};
+        const int next_y{y + dy[dir]};
+
+        // Stop if stepping ahead would leave the maze.
+        if (next_x < 0 || next_x >= MAZE_SIZE || next_y < 0 ||
+            next_y >= MAZE_SIZE)
+        {
+            break;
+        }
+
+        // In floodfill, driving straight only makes sense while distance decreases.
+        if (maze[next_x][next_y] >= maze[x][y])
+        {
+            break;
+        }
+
+        ++count;
+        x = next_x;
+        y = next_y;
+    }
+
+    return count;
+}
+
 void Floodfill::update_search()
 {
     Position current{current_x, current_y};
@@ -98,11 +157,6 @@ void Floodfill::update_search()
     mark_wall(current, relative_direction(1), sensor_right_wall);
     mark_wall(current, relative_direction(3), sensor_left_wall);
     flood();
-}
-
-void Floodfill::update_zooming()
-{
-    get_next_move();
 }
 
 Floodfill::Direction Floodfill::relative_direction(int relative_turn) const
@@ -169,8 +223,12 @@ bool Floodfill::track_path()
     {
         current_x--;  // X because we are moving WEST
     }
-    else if (current_x == 7 && current_y == 7)
+    else if ((current_x == 7 && current_y == 7) ||
+             (current_x == 7 && current_y == 8) ||
+             (current_x == 8 && current_y == 7) ||
+             (current_x == 8 && current_y == 8))
     {
+        searched = true;
         return true;  // Goal reached
     }
 
@@ -289,7 +347,23 @@ bool Floodfill::init_wall()
 
 void Floodfill::set_mode(Mode next_mode)
 {
-    mode = next_mode;
+    // Only allow zooming mode if the maze has been searched
+    if (next_mode == Mode::ZOOMING)
+    {
+        if (searched)
+        {
+            mode = next_mode;
+            // Mouse starts out facing North
+            dir = 0;
+            // Mouse starts at cell 0,0
+            current_x = 0;
+            current_y = 0;
+        }
+    }
+    else
+    {
+        mode = next_mode;
+    }
 }
 
 void Floodfill::set_sensor_data(bool front_wall, bool right_wall,
@@ -303,9 +377,9 @@ void Floodfill::set_sensor_data(bool front_wall, bool right_wall,
 void Floodfill::process_ir_data(const IrValues& ir_vals)
 {
     constexpr uint16_t kThresholdFront{
-        200};  // TODO: Change based on the readings
+        2000};  // TODO: Change based on the readings
     constexpr uint16_t kThresholdSide{
-        150};  // TODO: Change based on the readings
+        3700};  // TODO: Change based on the readings
 
     // Process front sensor data (Since we have left and right front sensors)
     bool wall_front = (ir_vals.front_left > kThresholdFront) ||
