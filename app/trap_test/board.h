@@ -1,6 +1,6 @@
 /**
  * @file board.h
- * @brief Navigation app board interface.
+ * @brief Trap test board interface — MotionController, USART, start button.
  * @author Bex Saw
  */
 
@@ -9,18 +9,20 @@
 #include "gpio.h"
 #include "ircontroller.h"
 #include "motioncontroller.h"
+#include "usart.h"
 
 namespace MM
 {
 
 struct Board
 {
-    IrController& ir_controller;
-    MotionController& motion_controller;
+    MotionController& motion;
+    IrController& ir;
+    Usart& usart;
     Gpio& start_bt;
 };
 
-bool bsp_init(void);
-Board& get_board(void);
+bool bsp_init();
+Board& get_board();
 
 }  // namespace MM

@@ -1,4 +1,4 @@
-set(EXECUTABLE cli)
+set(EXECUTABLE ir_threshold_test)
 set(LDF ${CMAKE_CURRENT_BINARY_DIR}/${EXECUTABLE}.ld)
 
 set(PREPROCESS_DEFS
@@ -8,7 +8,7 @@ set(PREPROCESS_DEFS
 
 add_subdirectory_for(STM32F411 bsp_f411)
 
-if (TARGET cli_bsp)
+if (TARGET ir_threshold_bsp)
 
     add_executable_for(${TARGET_DEVICE} ${EXECUTABLE} ${LDF}
         main.cc
@@ -17,18 +17,10 @@ if (TARGET cli_bsp)
 
     target_include_directories_for(${TARGET_DEVICE} ${EXECUTABLE}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-        PRIVATE ${CMAKE_SOURCE_DIR}/common/core/cli
-        PRIVATE ${CMAKE_SOURCE_DIR}/common/core/navigation
-        PRIVATE ${CMAKE_SOURCE_DIR}/common/core/api
-        PRIVATE ${CMAKE_SOURCE_DIR}/common/core/algorithm
-        PRIVATE ${CMAKE_SOURCE_DIR}/common/core/periph/irsensor
-        PRIVATE ${CMAKE_SOURCE_DIR}/common/drivers/io
     )
 
     target_link_libraries_for(${TARGET_DEVICE} ${EXECUTABLE} PRIVATE
-        cli_bsp
-        cli_core
-        navigation
+        ir_threshold_bsp
     )
 
     target_preprocess_for(${TARGET_DEVICE} ${EXECUTABLE} ${LINKER_SCRIPT} ${LDF} ${PREPROCESS_DEFS})

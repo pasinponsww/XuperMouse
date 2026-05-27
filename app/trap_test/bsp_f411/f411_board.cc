@@ -1,6 +1,6 @@
 /**
  * @file f411_board.cc
- * @brief Navigation app BSP — motors, encoders, IR sensors.
+ * @brief Trap test BSP — MotionController, USART1, start button.
  * @author Bex Saw
  */
 
@@ -18,6 +18,7 @@
 #include "st_pwm.h"
 #include "st_sys_clk.h"
 #include "st_timebase.h"
+#include "st_usart.h"
 
 volatile bool g_adc_ovr = false;
 
@@ -35,7 +36,7 @@ namespace Stmf4
 {
 
 /* ── Clock ─────────────────────────────────────────────────────────────── */
-HwClk clk{Configuration::SYSCLK_HSE_100MHZ};
+HwClk clk{Configuration::SYSCLK_HSE_100MHZ_24MHZ_INPUT};
 
 /* ── Motor PWM GPIO (AF, TIM2) ────────────────────────────────────────── */
 StGpioSettings motor_af_settings{GpioMode::AF, GpioOtype::PUSH_PULL,
@@ -163,9 +164,16 @@ IrController ircontroller{ircontroller_params};
 StTimebaseParams timebase_params{TIM1};
 HwTimebase timebase{timebase_params};
 
-/* ── Delay timer (TIM5) ───────────────────────────────────────────────── */
-StTimebaseParams delay_params{TIM5};
-HwTimebase delay_timer{delay_params};
+/* ── USART1 (PA9=TX, PA10=RX, AF7) ───────────────────────────────────── */
+StGpioSettings usart_gpio_settings{GpioMode::AF, GpioOtype::PUSH_PULL,
+                                   GpioOspeed::VERY_HIGH, GpioPupd::NO_PULL, 7};
+StGpioParams usart_tx_params{9, GPIOA, usart_gpio_settings};
+StGpioParams usart_rx_params{10, GPIOA, usart_gpio_settings};
+HwGpio usart_tx{usart_tx_params};
+HwGpio usart_rx{usart_rx_params};
+StUsartSettings usart_settings{UsartOversample::X8, UsartSampleMode::SINGLE};
+StUsartParams usart_params{USART1, 100'000'000u, 115200, usart_settings};
+StUsart usart{usart_params};
 
 /* ── Start button (PB4, active low) ──────────────────────────────────── */
 StGpioSettings button_settings{GpioMode::GPI, GpioOtype::PUSH_PULL,
@@ -173,23 +181,29 @@ StGpioSettings button_settings{GpioMode::GPI, GpioOtype::PUSH_PULL,
 StGpioParams start_bt_params{4, GPIOB, button_settings};
 HwGpio start_bt{start_bt_params};
 
+/* ── Delay timer (TIM5) ───────────────────────────────────────────────── */
+StTimebaseParams delay_params{TIM5};
+HwTimebase delay_timer{delay_params};
+
 }  // namespace Stmf4
 
 /* ── MotionController ─────────────────────────────────────────────────── */
-static constexpr Gains kDefaultGains{.kp = 0.000018f,
-                                     .ki = 0.0f,
-                                     .kd = 0.000018f};
+static constexpr Gains kGains{.kp = 0.001f, .ki = 0.03f, .kd = 0.0f};
 MotionControllerParams mc_params{.motor_left = Stmf4::motor_left,
                                  .motor_right = Stmf4::motor_right,
                                  .encoder_left = Stmf4::encoder_left,
                                  .encoder_right = Stmf4::encoder_right,
-                                 .gains = kDefaultGains,
-                                 .encoder_sample_us = kEncoderSampleUs};
+                                 .gains = kGains,
+                                 .encoder_sample_us = kEncoderSampleUs,
+                                 .max_output_left = 0.18f,
+                                 .max_output_right = 0.18f,
+                                 .right_speed_scale = 1.0f};
 MotionController motion_controller{mc_params};
 
 /* ── Board ────────────────────────────────────────────────────────────── */
-Board board{.ir_controller = Stmf4::ircontroller,
-            .motion_controller = motion_controller,
+Board board{.motion = motion_controller,
+            .ir = Stmf4::ircontroller,
+            .usart = Stmf4::usart,
             .start_bt = Stmf4::start_bt};
 
 /* ── BSP init ─────────────────────────────────────────────────────────── */
@@ -206,7 +220,8 @@ bool bsp_init()
                     RCC_AHB1ENR_GPIOCEN | RCC_AHB1ENR_DMA2EN;
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN | RCC_APB1ENR_TIM3EN |
                     RCC_APB1ENR_TIM4EN | RCC_APB1ENR_TIM5EN;
-    RCC->APB2ENR |= RCC_APB2ENR_TIM1EN | RCC_APB2ENR_ADC1EN;
+    RCC->APB2ENR |=
+        RCC_APB2ENR_TIM1EN | RCC_APB2ENR_ADC1EN | RCC_APB2ENR_USART1EN;
 
     /* Motors */
     ret = ret && Stmf4::in1_left.init();
@@ -217,8 +232,7 @@ bool bsp_init()
     ret = ret && Stmf4::pwm2_left.init();
     ret = ret && Stmf4::pwm1_right.init();
     ret = ret && Stmf4::pwm2_right.init();
-    ret =
-        ret && Stmf4::pwm1_left.set_frequency(kPwmFreqHz);  // all 4 share TIM2
+    ret = ret && Stmf4::pwm1_left.set_frequency(kPwmFreqHz);
     ret = ret && Stmf4::motor_left.init();
     ret = ret && Stmf4::motor_right.init();
 
@@ -250,14 +264,19 @@ bool bsp_init()
         Stmf4::timebase.start();
     }
 
-    /* Delay timer: TIM5 */
+    /* USART */
+    ret = ret && Stmf4::usart_tx.init();
+    ret = ret && Stmf4::usart_rx.init();
+    ret = ret && Stmf4::usart.init();
+
+    /* Button */
+    ret = ret && Stmf4::start_bt.init();
+
+    /* Delay timer: TIM5 at 1 MHz */
     ret = ret && Stmf4::delay_timer.init(50'000'000u, 1'000'000u,
                                          std::chrono::microseconds(4'294'967u));
     Stmf4::delay_timer.start();
     Utils::bind_timebase(Stmf4::delay_timer);
-
-    /* Start button */
-    ret = ret && Stmf4::start_bt.init();
 
     /* Interrupts */
     NVIC_SetPriority(ADC_IRQn, 0);
@@ -268,14 +287,9 @@ bool bsp_init()
     return ret;
 }
 
-Board& get_board()
-{
-    return board;
-}
-
 /* ── ISR handlers ─────────────────────────────────────────────────────── */
 
-void board_recover()
+static void board_recover()
 {
     NVIC_DisableIRQ(TIM1_UP_TIM10_IRQn);
     Stmf4::adc.stop();
@@ -307,6 +321,11 @@ extern "C" void TIM1_UP_TIM10_IRQHandler()
         return;
     }
     Stmf4::ircontroller.update();
+}
+
+Board& get_board()
+{
+    return board;
 }
 
 }  // namespace MM
