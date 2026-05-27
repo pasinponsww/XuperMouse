@@ -19,7 +19,7 @@ using namespace MM;
 // Physical constants
 static constexpr float kPi = 3.14159265358979f;
 static constexpr float kWheelDiamMm = 14.0f;
-static constexpr float kGearRatio = 15.0f;
+static constexpr float kGearRatio = 15.25f;
 static constexpr float kTicksPerRev = 12.0f;
 static constexpr float kMmPerTick =
     (kWheelDiamMm * kPi) / (kGearRatio * kTicksPerRev);
@@ -44,31 +44,6 @@ static void usart_print(Usart& usart, const char* str)
                                         __builtin_strlen(str)));
 }
 
-static void print_motor(Usart& usart, const char* label, const PidDebug& d,
-                        int32_t ticks)
-{
-    const float abs_out = d.output >= 0.0f ? d.output : -d.output;
-    const int duty = static_cast<int>(abs_out * 100.0f);
-    const char* dir = (d.output > 0.01f)    ? "FWD"
-                      : (d.output < -0.01f) ? "BRK"
-                                            : "COAST";
-
-    char buf[160];
-    snprintf(buf, sizeof(buf),
-             "%s\r\n"
-             "  ticks  : %ld\r\n"
-             "  error  : %.2f\r\n"
-             "  P      : %.4f\r\n"
-             "  I      : %.4f\r\n"
-             "  D      : %.4f\r\n"
-             "  out    : %.3f\r\n"
-             "  status : %s %d%%\r\n",
-             label, static_cast<long>(ticks), d.error, d.p, d.i_term, d.d,
-             d.output, dir, duty);
-
-    usart_print(usart, buf);
-}
-
 int main()
 {
     bsp_init();
@@ -84,65 +59,65 @@ int main()
     Utils::bind_timebase(timebase);
 
     // PWM frequencies
-    hw.pwm1_left.set_frequency(2000);
-    hw.pwm2_left.set_frequency(2000);
-    hw.pwm1_right.set_frequency(2000);
-    hw.pwm2_right.set_frequency(2000);
+    hw.pwm1_left.set_frequency(323);
+    hw.pwm2_left.set_frequency(323);
+    hw.pwm1_right.set_frequency(323);
+    hw.pwm2_right.set_frequency(323);
 
-    hw.encoder_left.reset_ticks();
-    hw.encoder_right.reset_ticks();
+    //hw.encoder_left.reset_ticks();
+    //hw.encoder_right.reset_ticks();
 
     // PID objects
     /// CHANGE: PID gains
-    const Gains kGains{0.001f, 0.0002f, 0.0f};
+    // Reduce oscillation around ktarget=4000 ticks/s.
+    const Gains kGains{0.000018f, 0.00000f, 0.000018f};
 
     PID pid_left(hw.motor_left, kGains);
     PID pid_right(hw.motor_right, kGains);
-
-    pid_left.set_output_limits(-0.30f, 0.30f);
-    pid_right.set_output_limits(-0.30f, 0.30f);
 
     // Trapezoidal profile
     Trapezoidal profile;
     profile.configure(0.0f, kCruiseTicks, kAccelTicksPerSec2,
                       kDecelTicksPerSec2, kCellTicks);
 
-    // Encoder timing (20 ms sample)
+    // Encoder timing (1ms)
     Sample::EncoderTiming timing =
         Sample::init_encoder_timing(hw.encoder_left, hw.encoder_sample_us);
 
-    usart_print(hw.usart, "== PROFILE + PID DEBUG ==\r\n");
+    usart_print(hw.usart, "time_us,vel_left_mm_s,vel_right_mm_s\r\n");
 
-    unsigned print_count = 0;
+    // const uint32_t start_us = timebase.get_count();
+    unsigned sample_count = 0;
 
-    while (!profile.is_complete())
+    while (1)
     {
-        const int32_t ticks_left =
+        //hw.motor_left.drive(Drv8231::Direction::FORWARD, 100);
+        //hw.motor_right.drive(Drv8231::Direction::FORWARD, 100);
+        // T method: returns ticks/sec directly
+        const float vel_ticks_left =
             Sample::sample_encoder(hw.encoder_left, timing);
-        const int32_t ticks_right =
-            Sample::sample_encoder(hw.encoder_right, timing);
+        // const float vel_ticks_right = Sample::sample_encoder(hw.encoder_right, timing);
 
-        profile.trapezoidal(EncoderInput{ticks_left, ticks_right},
-                            timing.sample_time_sec);
+        const float vel_left = vel_ticks_left;
+        // const float vel_right = vel_ticks_right;
 
-        const float target = profile.get_speed_setpoint();
-
-        pid_left.update(target, Drv8231::Direction::FORWARD, ticks_left,
+        // [[maybe_unused]] const float ktarget = 8000.0f;
+        [[maybe_unused]] const float ktarget = 4000.0f;
+        // error = ktarget - vel_ticks (dt=1.0f so PID sees velocity directly)
+        pid_left.update(ktarget, Drv8231::Direction::FORWARD,
+                        static_cast<int32_t>(vel_ticks_left),
                         timing.sample_time_sec);
-        pid_right.update(target, Drv8231::Direction::FORWARD, ticks_right,
-                         timing.sample_time_sec);
+        // pid_right.update(ktarget, Drv8231::Direction::FORWARD,
+        //                   static_cast<int32_t>(vel_ticks_right),
+        //                   timing.sample_time_sec);
 
-        if (++print_count % 10 != 0)
+        if (++sample_count % 5 != 0)
             continue;
 
-        char hdr[64];
-        snprintf(hdr, sizeof(hdr), "--- sp:%.0f t/s  dist:%ld/%ld ticks\r\n",
-                 target, static_cast<long>(profile.get_progress_ticks()),
-                 static_cast<long>(kCellTicks));
-        usart_print(hw.usart, hdr);
-
-        print_motor(hw.usart, "LEFT:", pid_left.get_debug(), ticks_left);
-        print_motor(hw.usart, "RIGHT:", pid_right.get_debug(), ticks_right);
+        // const uint32_t elapsed_us = timebase.get_count() - start_us;
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%.2f\r\n", static_cast<double>(vel_left));
+        usart_print(hw.usart, buf);
     }
 
     hw.motor_left.drive(Drv8231::Direction::COAST, 0);
