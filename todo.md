@@ -2,17 +2,13 @@
 
 ## CRITICAL (blocks correct movement)
 
-- [ ] **PWM frequency is 2× actual**
+- [ ] **PWM output frequency is half the configured value (2× math error) — CONFIRMED on scope**
   - `kPwmFreqHz = 323` in `f411_board.cc:28`
-  - Only `pwm1_left.set_frequency()` is called; `pwm2_left`, `pwm1_right`, `pwm2_right` are never given a frequency — they inherit whatever the timer defaults to
-  - All four PWM channels on TIM2 share one ARR register, so calling `set_frequency` on any one channel sets all four, but this should be verified
-  - Confirm that the actual output frequency matches the intended 323 Hz (scope or logic analyser); if the prescaler math doubles it, fix the calculation in `StPwm`
-
-- [ ] **ADC sequence array has only 1 slot for 4 IR channels**
-  - `std::array<uint8_t, 1> adc_seq{9}` in `f411_board.cc:130`
-  - Only channel 9 (LEFT sensor) is in the scan sequence; channels 8, 10, 11 are not
-  - DMA transfers one conversion then stops — FRONT_LEFT, FRONT_RIGHT, RIGHT IR sensors always read stale / zero
-  - Fix: expand `adc_seq` to `{9, 8, 11, 10}` and make sure ADC scan length and DMA buffer length match (4 entries)
+  - Scope confirms a 2:1 discrepancy: commanding **2 kHz produces ~1 kHz at the pin**. The actual output is half of whatever is configured, so the same factor applies to the 323 Hz setpoint (real output ≈ 161 Hz)
+  - Only `pwm1_left.set_frequency()` is called; `pwm2_left`, `pwm1_right`, `pwm2_right` are never given a frequency — they inherit whatever the timer defaults to. All four channels on TIM2 share one ARR, so setting one sets all four (still worth a quick per-channel scope check)
+  - **Fix the math in `StPwm`:** the prescaler/ARR calculation currently makes the period 2× too long, so requested ÷ 2 = measured. Correct it so the requested frequency equals the measured output 1:1
+    - Likely culprits to check: center-aligned PWM mode (up-then-down counting doubles the period → halves the frequency for a given ARR), or the timer-clock value plugged into the formula is off by 2× (APB timer-clock doubling). Confirm which applies, then fix
+    - After the fix, re-scope: commanded frequency should match measured frequency exactly
 
 ## HIGH (movement quality)
 
@@ -50,6 +46,11 @@
   - Consider lowering `kWallSideThreshold` to ~3400 or switching to a continuous correction (always apply centering, just scale the gain by confidence)
 
 ## MEDIUM (reliability)
+
+- [ ] **Verify ADC scan timing doesn't delay IR readings** *(was: "ADC sequence array has only 1 slot" — readings now confirmed fine)*
+  - `adc_seq` in `f411_board.cc:130` — all four IR channels (9 = LEFT, plus 8, 11, 10) are now reading correctly. The earlier "single-slot array → stale/zero reads" concern is **resolved**; the readings are fine.
+  - Remaining concern is **latency, not correctness**: confirm the 4-conversion scan + DMA completes well within one motion-loop period, so the IR values used for centering and front-wall detection are fresh and not one cycle stale by the time the control loop reads them
+  - Check: total scan time (per-channel sample time × scan length) vs the motion-loop rate. If the sequence is slow, reduce per-channel sample time, or make sure the DMA-complete event lands before the control loop reads the buffer (don't read mid-transfer)
 
 - [ ] **Wall-edge detection fires on noise / brief IR dropout**
   - A single noisy reading can flip `left_wall` or `right_wall` from true→false and stop the robot mid-corridor
